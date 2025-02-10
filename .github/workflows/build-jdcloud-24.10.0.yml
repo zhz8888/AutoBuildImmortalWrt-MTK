@@ -1,0 +1,161 @@
+name: build-jdcloud-24.10.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        type: choice
+        description: "请选择路由器型号"
+        required: true
+        options:
+          - jdcloud_re-cp-03
+          - jdcloud_re-cp-02
+          - jdcloud_re-sp-01b
+        default: jdcloud_re-sp-01b
+      include_docker:
+        description: |
+          是否编译 Docker 插件（仅限Filogic芯片）
+        required: true
+        default: 'no'
+        type: choice
+        options:
+          - 'yes'
+          - 'no'
+      enable_pppoe:
+        description: "是否配置PPPoE拨号信息?"
+        required: true
+        default: 'no'
+        type: choice
+        options:
+          - 'yes'
+          - 'no'
+      pppoe_account:
+        description: "宽带账号 (若启用PPPoE)"
+        required: false
+      pppoe_password:
+        description: "宽带密码 (若启用PPPoE)"
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set executable permissions
+        run: |
+          chmod +x ${{ github.workspace }}/jdcloud/filogic/build-24.sh
+          chmod +x ${{ github.workspace }}/jdcloud/ramips/build-24.sh
+
+      - name: Get current router model name and set to environment variable
+        run: |
+          if [ "${{ github.event.inputs.profile }}" = "jdcloud_re-cp-03" ]; then
+            MODEL="RE-CP-03"
+          elif [ "${{ github.event.inputs.profile }}" = "jdcloud_re-cp-02" ]; then
+            MODEL="RE-CP-02"
+          elif [ "${{ github.event.inputs.profile }}" = "jdcloud_re-sp-01b" ]; then
+            MODEL="RE-SP-01B"
+          else
+            echo "Error: Invalid profile selected!"
+            exit 1
+          fi
+          echo "MODEL=$MODEL" >> $GITHUB_ENV
+
+      - name: Validate PPPoE Inputs
+        run: |
+          if [[ "${{ inputs.enable_pppoe }}" == "yes" ]]; then
+            if [[ -z "${{ inputs.pppoe_account }}" || -z "${{ inputs.pppoe_password }}" ]]; then
+              echo "Error: PPPoE account and password must be provided when PPPoE is enabled!"
+              exit 1
+            fi
+          else
+            echo -e "PPPoE account and password are not set, passing..."
+          fi
+
+      - name: Build JDCloud ImmortalWrt 24.10.0
+        run: |
+          profiles="${{ github.event.inputs.profile }}"
+          include_docker="${{ github.event.inputs.include_docker }}"
+
+          if [ "$profiles" = "jdcloud_re-cp-03" ]; then
+            tag=mediatek-filogic-openwrt-24.10.0
+            build_script="jdcloud/filogic/build-24.sh"
+            echo "platform=mediatek/filogic" >> $GITHUB_ENV
+          else
+            tag=ramips-mt7621-openwrt-24.10.0
+            build_script="jdcloud/ramips/build-24.sh"
+            echo "platform=ramips/mt7621" >> $GITHUB_ENV
+          fi
+
+          IFS=',' read -r -a profile_array <<< "$profiles"
+
+          for profile in "${profile_array[@]}"; do
+            echo "Building for profile: $profile"
+
+            docker run --rm -i \
+              --user root \
+              -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
+              -v "${{ github.workspace }}/files/etc/uci-defaults:/home/build/immortalwrt/files/etc/uci-defaults" \
+              -v "${{ github.workspace }}/$build_script:/home/build/immortalwrt/build.sh" \
+              -e PROFILE=$profile \
+              -e INCLUDE_DOCKER=$include_docker \
+              -e ENABLE_PPPOE=${{ inputs.enable_pppoe }} \
+              -e PPPOE_ACCOUNT=${{ inputs.pppoe_account }} \
+              -e PPPOE_PASSWORD=${{ inputs.pppoe_password }} \
+              immortalwrt/imagebuilder:$tag /bin/bash /home/build/immortalwrt/build.sh
+          done
+
+      - name: Generate Firmware SHA-256
+        run: |
+          tree ${{ github.workspace }}/bin/targets/${{ env.platform }}
+          cp -r ${{ github.workspace }}/bin/targets/${{ env.platform }}/*.bin ${{ github.workspace }}
+          for file in *.bin; do
+            sha256sum "$file" > "$file.sha256"
+            sha256sum -c "$file.sha256"
+          done
+
+      - name: Generate release informations
+        run: |
+          TIME="$(curl "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" | jq -r .created_at)"
+
+          RELEASE_TAG="ImmortalWrt-JDCloud-${{ env.MODEL }}"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+
+          if [ "${{ github.event.inputs.include_docker }}" == "yes" ]; then
+            IS_DOCKER="是"
+          else
+            IS_DOCKER="否"
+          fi
+
+          cat <<EOF | sed -E 's/^  //' > Release.md
+            CI ImmortalWrt-23.05.4-JDCloud-${{ env.MODEL }} $(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')
+
+            构建时间：\`$(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')\`
+            构建版本：ImmortalWrt-23.05.4-JDCloud-${{ env.MODEL }}
+            是否内置 Docker ：$IS_DOCKER
+            登录后台：`192.168.100.1`
+            用户名：`root`
+            密码：无
+          EOF
+
+          echo "RELEASE_NAME=$(head --line=1 Release.md)" >> $GITHUB_ENV
+          tail --line=+2 Release.md > Body.md
+
+      - name: Upload ImmortalWrt as release assets
+        uses: softprops/action-gh-release@v2.2.1
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          body_path: ${{ github.workspace }}/Body.md
+          files: |
+            ${{ github.workspace }}/*.bin
+            ${{ github.workspace }}/*.sha256
+          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
