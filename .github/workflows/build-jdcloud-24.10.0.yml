@@ -36,8 +36,8 @@ jobs:
 
       - name: Set executable permissions
         run: |
-          chmod +x ${{ github.workspace }}/jdcloud/filogic/build-24.sh
-          chmod +x ${{ github.workspace }}/jdcloud/ramips/build-24.sh
+          chmod +x ${{ github.workspace }}/public/filogic/build-24.sh
+          chmod +x ${{ github.workspace }}/public/ramips/build-24.sh
 
       - name: Get current router model name and set to environment variable
         run: |
@@ -60,11 +60,11 @@ jobs:
 
           if [ "$profiles" = "jdcloud_re-cp-03" ]; then
             tag=mediatek-filogic-openwrt-24.10.0
-            build_script="jdcloud/filogic/build-24.sh"
+            build_script="public/filogic/build-24.sh"
             echo "platform=mediatek/filogic" >> $GITHUB_ENV
           else
             tag=ramips-mt7621-openwrt-24.10.0
-            build_script="jdcloud/ramips/build-24.sh"
+            build_script="public/ramips/build-24.sh"
             echo "platform=ramips/mt7621" >> $GITHUB_ENV
           fi
 
