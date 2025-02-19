@@ -1,4 +1,4 @@
-name: build-jdcloud-24.10.0
+name: build-cudy-24.10.0
 
 on:
   workflow_dispatch:
@@ -8,13 +8,12 @@ on:
         description: "请选择路由器型号"
         required: true
         options:
-          - jdcloud_re-cp-03
-          - jdcloud_re-cp-02
-          - jdcloud_re-sp-01b
-        default: jdcloud_re-sp-01b
+          - cudy_tr3000-v1
+          - cudy_tr3000-v1-ubootmod
+        default: Cudy_tr3000-v1
       include_docker:
         description: |
-          是否编译 Docker 插件（仅限Filogic芯片）
+          是否编译 Docker 插件
         required: true
         default: 'no'
         type: choice
@@ -37,31 +36,26 @@ jobs:
 
       - name: Get current router model name and set to environment variable
         run: |
-          if [ "${{ github.event.inputs.profile }}" = "jdcloud_re-cp-03" ]; then
-            MODEL="RE-CP-03"
-          elif [ "${{ github.event.inputs.profile }}" = "jdcloud_re-cp-02" ]; then
-            MODEL="RE-CP-02"
-          elif [ "${{ github.event.inputs.profile }}" = "jdcloud_re-sp-01b" ]; then
-            MODEL="RE-SP-01B"
+          if [ "${{ github.event.inputs.profile }}" = "cudy_tr3000-v1" ]; then
+            MODEL="TR3000-V1"
+          elif [ "${{ github.event.inputs.profile }}" = "cudy_tr3000-v1-ubootmod" ]; then
+            MODEL="TR3000-V1-UbootMod"
           else
             echo "Error: Invalid profile selected!"
             exit 1
           fi
           echo "MODEL=$MODEL" >> $GITHUB_ENV
+          echo "MODEL=$MODEL" >> $GITHUB_ENV
 
-      - name: Build JDCloud ImmortalWrt 24.10.0
+      - name: Build Cudy ImmortalWrt 24.10.0
         run: |
           profiles="${{ github.event.inputs.profile }}"
           include_docker="${{ github.event.inputs.include_docker }}"
 
-          if [ "$profiles" = "jdcloud_re-cp-03" ]; then
+          if [ "$profiles" = "cudy_tr3000-v1" || "$profiles" = "cudy_tr3000-v1-ubootmod" ]; then
             tag=mediatek-filogic-openwrt-24.10.0
             build_script="public/filogic/build-24.sh"
             echo "platform=mediatek/filogic" >> $GITHUB_ENV
-          else
-            tag=ramips-mt7621-openwrt-24.10.0
-            build_script="public/ramips/build-24.sh"
-            echo "platform=ramips/mt7621" >> $GITHUB_ENV
           fi
 
           IFS=',' read -r -a profile_array <<< "$profiles"
@@ -82,7 +76,17 @@ jobs:
       - name: Generate Firmware SHA-256
         run: |
           tree ${{ github.workspace }}/bin/targets/${{ env.platform }}
+          cp -r ${{ github.workspace }}/bin/targets/${{ env.platform }}/*.fip ${{ github.workspace }}
+          cp -r ${{ github.workspace }}/bin/targets/${{ env.platform }}/*.itb ${{ github.workspace }}
           cp -r ${{ github.workspace }}/bin/targets/${{ env.platform }}/*.bin ${{ github.workspace }}
+          for file in *.fip; do
+            sha256sum "$file" > "$file.sha256"
+            sha256sum -c "$file.sha256"
+          done
+          for file in *.itb; do
+            sha256sum "$file" > "$file.sha256"
+            sha256sum -c "$file.sha256"
+          done
           for file in *.bin; do
             sha256sum "$file" > "$file.sha256"
             sha256sum -c "$file.sha256"
@@ -92,7 +96,7 @@ jobs:
         run: |
           TIME="$(curl "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" | jq -r .created_at)"
 
-          RELEASE_TAG="ImmortalWrt-JDCloud-${{ env.MODEL }}"
+          RELEASE_TAG="ImmortalWrt-Cudy-${{ env.MODEL }}"
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
           if [ "${{ github.event.inputs.include_docker }}" == "yes" ]; then
@@ -102,10 +106,10 @@ jobs:
           fi
 
           cat <<EOF | sed -E 's/^  //' > Release.md
-            CI ImmortalWrt-23.05.4-JDCloud-${{ env.MODEL }} $(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')
+            CI ImmortalWrt-23.05.4-Cudy-${{ env.MODEL }} $(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')
 
             构建时间：\`$(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')\`
-            构建版本：ImmortalWrt-23.05.4-JDCloud-${{ env.MODEL }}
+            构建版本：ImmortalWrt-23.05.4-Cudy-${{ env.MODEL }}
             是否内置 Docker ：$IS_DOCKER
             登录后台：`192.168.100.1`
             用户名：`root`
@@ -122,6 +126,8 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           body_path: ${{ github.workspace }}/Body.md
           files: |
+            ${{ github.workspace }}/*.fip
+            ${{ github.workspace }}/*.itb
             ${{ github.workspace }}/*.bin
             ${{ github.workspace }}/*.sha256
           token: ${{ secrets.GITHUB_TOKEN }}
