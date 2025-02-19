@@ -110,8 +110,8 @@ jobs:
             构建时间：\`$(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')\`
             构建版本：ImmortalWrt-23.05.4-JDCloud-${{ env.MODEL }}
             是否内置 Docker ：$IS_DOCKER
-            登录后台：`192.168.100.1`
-            用户名：`root`
+            登录后台：\`192.168.100.1\`
+            用户名：\`root\`
             密码：无
           EOF
 
