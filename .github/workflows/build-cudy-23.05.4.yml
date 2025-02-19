@@ -85,7 +85,7 @@ jobs:
         run: |
           TIME="$(curl "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" | jq -r .created_at)"
 
-          RELEASE_TAG="ImmortalWrt-Cudy-${{ env.MODEL }}"
+          RELEASE_TAG="ImmortalWrt-23.05.4-Cudy-${{ env.MODEL }}-$(date -d "${TIME}" -u +'%Y-%m-%d')"
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
           if [ "${{ github.event.inputs.include_docker }}" == "yes" ]; then
