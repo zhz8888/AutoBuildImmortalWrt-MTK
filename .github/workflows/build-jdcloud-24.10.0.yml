@@ -95,7 +95,7 @@ jobs:
         run: |
           TIME="$(curl "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" | jq -r .created_at)"
 
-          RELEASE_TAG="ImmortalWrt-JDCloud-${{ env.MODEL }}"
+          RELEASE_TAG="ImmortalWrt-24.10.0-JDCloud-${{ env.MODEL }}-$(date -d "${TIME}" -u +'%Y-%m-%d')"
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
           if [ "${{ github.event.inputs.include_docker }}" == "yes" ]; then
@@ -105,10 +105,10 @@ jobs:
           fi
 
           cat <<EOF | sed -E 's/^  //' > Release.md
-            CI ImmortalWrt-23.05.4-JDCloud-${{ env.MODEL }} $(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')
+            CI ImmortalWrt-24.10.0-JDCloud-${{ env.MODEL }} $(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')
 
             构建时间：\`$(date -d "${TIME}" -u +'%Y-%m-%d %H:%M:%S %Z(%:z)')\`
-            构建版本：ImmortalWrt-23.05.4-JDCloud-${{ env.MODEL }}
+            构建版本：ImmortalWrt-24.10.0
             是否内置 Docker ：$IS_DOCKER
             登录后台：\`192.168.100.1\`
             用户名：\`root\`
